@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   SafeAreaView, 
   View, 
@@ -8,12 +8,12 @@ import {
   TouchableOpacity, 
   ActivityIndicator 
 } from 'react-native';
-import LinearGradient from 'react-native-linear-gradient';
+import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons } from '@expo/vector-icons'; // Ensure @expo/vector-icons is installed
 
 // Validate icon names: Check https://materialdesignicons.com/
 // Valid names used here: 'bitcoin', 'ethereum', 'doge', 'binance', 'solana'
-type CoinId = 'bitcoin' | 'ethereum' | 'doge' | 'binance' | 'solana'; // Corrected invalid IDs
+type CoinId = 'currency-btc' | 'currency-eth' | 'dog' | 'currency-usd' | 'currency-eur';
 
 interface Coin {
   id: CoinId; // Now matches valid icon names
@@ -23,6 +23,49 @@ interface Coin {
   quantity: number;
   priceChange24h: number;
 }
+
+const MOCK_COINS: Coin[] = [
+  {
+    id: 'currency-btc',
+    symbol: 'BTC',
+    name: 'Bitcoin',
+    price: 42000,
+    quantity: 0.3,
+    priceChange24h: 1.2,
+  },
+  {
+    id: 'currency-eth',
+    symbol: 'ETH',
+    name: 'Ethereum',
+    price: 2100,
+    quantity: 2.5,
+    priceChange24h: -0.8,
+  },
+  {
+    id: 'dog',
+    symbol: 'DOGE',
+    name: 'Dogecoin',
+    price: 0.08,
+    quantity: 1000,
+    priceChange24h: 3.5,
+  },
+  {
+    id: 'currency-usd',
+    symbol: 'BNB',
+    name: 'Binance Coin',
+    price: 300,
+    quantity: 1.2,
+    priceChange24h: 0.5,
+  },
+  {
+    id: 'currency-eur',
+    symbol: 'SOL',
+    name: 'Solana',
+    price: 45,
+    quantity: 5,
+    priceChange24h: -2.1,
+  },
+];
 
 const formatNumber = (num: number) => {
   const options = {
@@ -38,68 +81,24 @@ export default function HomeScreen() {
   const [portfolioChange24h, setPortfolioChange24h] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(true);
 
-  // Mock data with valid CoinId icons (adjusted IDs)
-  const mockCoins: Coin[] = [
-    {
-      id: 'bitcoin',
-      symbol: 'BTC',
-      name: 'Bitcoin',
-      price: 42000,
-      quantity: 0.3,
-      priceChange24h: 1.2,
-    },
-    {
-      id: 'ethereum',
-      symbol: 'ETH',
-      name: 'Ethereum',
-      price: 2100,
-      quantity: 2.5,
-      priceChange24h: -0.8,
-    },
-    {
-      id: 'doge', // Corrected from 'dogecoin' (matches MaterialCommunityIcons name)
-      symbol: 'DOGE',
-      name: 'Dogecoin',
-      price: 0.08,
-      quantity: 1000,
-      priceChange24h: 3.5,
-    },
-    {
-      id: 'binance', // Corrected from 'binancecoin' (matches MaterialCommunityIcons name)
-      symbol: 'BNB',
-      name: 'Binance Coin',
-      price: 300,
-      quantity: 1.2,
-      priceChange24h: 0.5,
-    },
-    {
-      id: 'solana',
-      symbol: 'SOL',
-      name: 'Solana',
-      price: 45,
-      quantity: 5,
-      priceChange24h: -2.1,
-    },
-  ];
-
-  const fetchCryptoData = async () => {
+  const fetchCryptoData = useCallback(async () => {
     await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate API delay
-    
+
     // Calculate portfolio metrics
-    const totalValue = mockCoins.reduce((sum, coin) => sum + (coin.price * coin.quantity), 0);
-    const sumWeightedChange = mockCoins.reduce((sum, coin) => 
+    const totalValue = MOCK_COINS.reduce((sum, coin) => sum + (coin.price * coin.quantity), 0);
+    const sumWeightedChange = MOCK_COINS.reduce((sum, coin) =>
       sum + (coin.price * coin.quantity) * (coin.priceChange24h / 100), 0);
     const portfolioChange = totalValue === 0 ? 0 : (sumWeightedChange / totalValue) * 100;
 
-    setCoins(mockCoins);
+    setCoins(MOCK_COINS);
     setPortfolioBalance(totalValue);
     setPortfolioChange24h(portfolioChange);
     setLoading(false);
-  };
+  }, []);
 
   useEffect(() => {
     fetchCryptoData();
-  }, []);
+  }, [fetchCryptoData]);
 
   if (loading) {
     return (
