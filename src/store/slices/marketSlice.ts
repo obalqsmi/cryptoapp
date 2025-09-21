@@ -1,81 +1,57 @@
 // File: src/store/slices/marketSlice.ts
 import { PayloadAction, createSlice } from '@reduxjs/toolkit';
-import { Candle, OrderBookSnapshot, Pair, Token, TradeTick } from '../../types';
-import { seedCandles, seedPairs, seedTokens } from '../../services/seed';
-
-export interface MarketState {
-  tokens: Token[];
-  pairs: Pair[];
-  candlesByPair: Record<string, Candle[]>;
-  orderBooks: Record<string, OrderBookSnapshot>;
-  recentTrades: Record<string, TradeTick[]>;
-  selectedSegment: 'Hot' | 'Top' | 'New' | 'Gainers' | 'Losers';
-  searchTerm: string;
-}
-
-const tokens = seedTokens();
-const pairs = seedPairs(tokens);
-const candlesByPair = pairs.reduce<Record<string, Candle[]>>((acc, pair) => {
-  acc[pair.id] = seedCandles(pair);
-  return acc;
-}, {});
+import { Candle, MarketPair, MarketState, Trade } from '../../types';
 
 const initialState: MarketState = {
-  tokens,
-  pairs,
-  candlesByPair,
-  orderBooks: {},
-  recentTrades: {},
-  selectedSegment: 'Hot',
-  searchTerm: '',
+  pairs: [],
+  candles: {},
+  orderBook: {},
+  trades: {},
+  selectedInterval: '5m',
 };
 
 const marketSlice = createSlice({
   name: 'market',
   initialState,
   reducers: {
-    setSegment(state, action: PayloadAction<MarketState['selectedSegment']>) {
-      state.selectedSegment = action.payload;
-    },
-    setSearchTerm(state, action: PayloadAction<string>) {
-      state.searchTerm = action.payload;
-    },
-    hydrateMarket(state, action: PayloadAction<Partial<MarketState>>) {
-      return { ...state, ...action.payload };
+    seedMarket(state, action: PayloadAction<{ pairs: MarketPair[]; candles: Record<string, Candle[]> }>) {
+      state.pairs = action.payload.pairs;
+      state.candles = action.payload.candles;
+      state.pairs.forEach((pair) => {
+        state.orderBook[pair.id] = { bids: [], asks: [] };
+        state.trades[pair.id] = [];
+      });
     },
     updateTick(state, action: PayloadAction<{ pairId: string; price: number; change24h: number }>) {
-      const { pairId, price, change24h } = action.payload;
-      const pair = state.pairs.find((item) => item.id === pairId);
+      const pair = state.pairs.find((item) => item.id === action.payload.pairId);
       if (pair) {
-        pair.lastPrice = price;
-        pair.change24h = change24h;
-        pair.history = [...pair.history.slice(-119), price];
+        pair.lastPrice = action.payload.price;
+        pair.change24h = action.payload.change24h;
+        pair.sparkline = [...pair.sparkline.slice(1), action.payload.price];
       }
     },
     updateCandle(state, action: PayloadAction<{ pairId: string; candle: Candle }>) {
-      const { pairId, candle } = action.payload;
-      const list = state.candlesByPair[pairId] ?? [];
-      state.candlesByPair[pairId] = [...list.slice(0, -1), candle];
+      const candles = state.candles[action.payload.pairId];
+      if (candles) {
+        candles[candles.length - 1] = action.payload.candle;
+      }
     },
-    updateDepth(state, action: PayloadAction<OrderBookSnapshot>) {
-      const snapshot = action.payload;
-      state.orderBooks[snapshot.pairId] = snapshot;
+    updateDepth(state, action: PayloadAction<{ pairId: string; bids: { price: number; amount: number }[]; asks: { price: number; amount: number }[] }>) {
+      state.orderBook[action.payload.pairId] = {
+        bids: action.payload.bids,
+        asks: action.payload.asks,
+      };
     },
-    addTrade(state, action: PayloadAction<TradeTick>) {
-      const trade = action.payload;
-      const list = state.recentTrades[trade.pairId] ?? [];
-      state.recentTrades[trade.pairId] = [trade, ...list].slice(0, 30);
+    pushTrade(state, action: PayloadAction<Trade>) {
+      const trades = state.trades[action.payload.pairId] ?? [];
+      state.trades[action.payload.pairId] = [action.payload, ...trades].slice(0, 30);
+    },
+    setInterval(state, action: PayloadAction<'1m' | '5m' | '1h' | '1d'>) {
+      state.selectedInterval = action.payload;
     },
   },
 });
 
-export const {
-  setSegment,
-  setSearchTerm,
-  hydrateMarket,
-  updateTick,
-  updateCandle,
-  updateDepth,
-  addTrade,
-} = marketSlice.actions;
+export const { seedMarket, updateTick, updateCandle, updateDepth, pushTrade, setInterval } = marketSlice.actions;
+
 export default marketSlice.reducer;

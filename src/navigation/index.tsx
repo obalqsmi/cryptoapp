@@ -1,97 +1,83 @@
 // File: src/navigation/index.tsx
-import { NavigationContainer, DefaultTheme, Theme } from '@react-navigation/native';
+import React from 'react';
+import { NavigationContainer, DarkTheme, DefaultTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
-import React from 'react';
 import { useAppSelector } from '../store/hooks';
+import AuthScreen from '../screens/AuthScreen';
+import DashboardScreen from '../screens/DashboardScreen';
+import MarketsScreen from '../screens/MarketsScreen';
+import MarketDetailScreen from '../screens/MarketDetailScreen';
+import OrderHistoryScreen from '../screens/OrderHistoryScreen';
+import SettingsScreen from '../screens/SettingsScreen';
 import { colors } from '../theme';
-import WalletScreen from '../screens/WalletScreen';
-import SwapScreen from '../screens/SwapScreen';
-import EarnScreen from '../screens/EarnScreen';
-import ActionsScreen from '../screens/ActionsScreen';
-import CoinDetailScreen from '../screens/CoinDetailScreen';
-import BuyScreen from '../screens/BuyScreen';
 
 export type RootStackParamList = {
-  Root: undefined;
-  CoinDetail: { pairId: string };
-  Buy: undefined;
+  Auth: undefined;
+  Main: undefined;
+  MarketDetail: { pairId: string };
 };
 
-export type TabParamList = {
-  Wallet: undefined;
-  Swap: undefined;
-  Earn: undefined;
-  Actions: undefined;
+export type AppTabParamList = {
+  Dashboard: undefined;
+  Markets: undefined;
+  History: undefined;
+  Settings: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
-const Tab = createBottomTabNavigator<TabParamList>();
+const Tab = createBottomTabNavigator<AppTabParamList>();
 
-const darkTheme: Theme = {
-  ...DefaultTheme,
-  colors: {
-    ...DefaultTheme.colors,
-    background: colors.background,
-    card: colors.surface,
-    primary: colors.accent,
-    text: colors.textPrimary,
-    border: colors.border,
-    notification: colors.accent,
-  },
-};
-
-const TabsNavigator = () => {
-  return (
-    <Tab.Navigator
-      screenOptions={({ route }) => ({
-        headerShown: false,
-        tabBarActiveTintColor: colors.accent,
-        tabBarInactiveTintColor: colors.textMuted,
-        tabBarStyle: {
-          backgroundColor: colors.surface,
-          borderTopColor: colors.border,
-        },
-        tabBarLabelStyle: {
-          fontSize: 12,
-        },
-        tabBarIcon: ({ color, size }) => {
-          const iconName =
-            route.name === 'Wallet'
-              ? 'wallet'
-              : route.name === 'Swap'
-                ? 'swap-horizontal'
-                : route.name === 'Earn'
-                  ? 'trending-up'
-                  : 'flash';
-          return <Ionicons name={iconName as never} size={size} color={color} />;
-        },
-      })}
-    >
-      <Tab.Screen name="Wallet" component={WalletScreen} />
-      <Tab.Screen name="Swap" component={SwapScreen} />
-      <Tab.Screen name="Earn" component={EarnScreen} />
-      <Tab.Screen name="Actions" component={ActionsScreen} />
-    </Tab.Navigator>
-  );
-};
+const AppTabs = () => (
+  <Tab.Navigator
+    screenOptions={({ route }) => ({
+      headerShown: false,
+      tabBarStyle: {
+        backgroundColor: colors.surface,
+        borderTopColor: colors.border,
+      },
+      tabBarActiveTintColor: colors.accent,
+      tabBarInactiveTintColor: colors.textSecondary,
+      tabBarIcon: ({ color, size }) => {
+        const icon =
+          route.name === 'Dashboard'
+            ? 'wallet'
+            : route.name === 'Markets'
+            ? 'stats-chart'
+            : route.name === 'History'
+            ? 'time'
+            : 'settings';
+        return <Ionicons name={icon as never} color={color} size={size} />;
+      },
+    })}
+  >
+    <Tab.Screen name="Dashboard" component={DashboardScreen} />
+    <Tab.Screen name="Markets" component={MarketsScreen} />
+    <Tab.Screen name="History" component={OrderHistoryScreen} />
+    <Tab.Screen name="Settings" component={SettingsScreen} />
+  </Tab.Navigator>
+);
 
 const RootNavigator = () => {
   const themeMode = useAppSelector((state) => state.session.theme);
-  const navigationTheme = React.useMemo(() => darkTheme, [themeMode]);
+  const authenticated = useAppSelector((state) => state.session.authenticated);
 
   return (
-    <NavigationContainer theme={navigationTheme}>
-      <Stack.Navigator
-        screenOptions={{
-          headerShown: false,
-          animation: 'fade',
-        }}
-      >
-        <Stack.Screen name="Root" component={TabsNavigator} />
-        <Stack.Screen name="CoinDetail" component={CoinDetailScreen} />
-        <Stack.Screen name="Buy" component={BuyScreen} />
+    <NavigationContainer theme={themeMode === 'dark' ? DarkTheme : DefaultTheme}>
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        {!authenticated ? (
+          <Stack.Screen name="Auth" component={AuthScreen} />
+        ) : (
+          <>
+            <Stack.Screen name="Main" component={AppTabs} />
+            <Stack.Screen
+              name="MarketDetail"
+              component={MarketDetailScreen}
+              options={{ headerShown: true, headerTransparent: true, headerTintColor: colors.textPrimary, title: '' }}
+            />
+          </>
+        )}
       </Stack.Navigator>
     </NavigationContainer>
   );

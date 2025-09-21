@@ -1,21 +1,20 @@
 // File: src/store/index.ts
 import { configureStore } from '@reduxjs/toolkit';
-import sessionReducer from './slices/sessionSlice';
 import marketReducer from './slices/marketSlice';
 import portfolioReducer from './slices/portfolioSlice';
-import swapReducer from './slices/swapSlice';
+import sessionReducer from './slices/sessionSlice';
+import ordersReducer from './slices/ordersSlice';
 
 export const store = configureStore({
   reducer: {
     session: sessionReducer,
     market: marketReducer,
     portfolio: portfolioReducer,
-    swap: swapReducer,
+    orders: ordersReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
       serializableCheck: false,
-      immutableCheck: false,
     }),
 });
 

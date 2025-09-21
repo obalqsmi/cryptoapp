@@ -3,130 +3,94 @@ import React from 'react';
 import { Provider } from 'react-redux';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import RootNavigator from './navigation';
 import { store } from './store';
-import { useAppDispatch, useAppSelector } from './store/hooks';
+import { useAppDispatch } from './store/hooks';
+import { hydrateSession } from './store/slices/sessionSlice';
+import { hydratePortfolio, setBalances, setAllocations, setEquityHistory } from './store/slices/portfolioSlice';
+import { hydrateOrders } from './store/slices/ordersSlice';
+import { seedMarket, updateTick, updateCandle, updateDepth, pushTrade } from './store/slices/marketSlice';
 import { storage } from './services/storage';
-import { hydrateSession, SessionState } from './store/slices/sessionSlice';
-import { hydratePortfolio, updateEarnPositions, PortfolioState } from './store/slices/portfolioSlice';
-import { hydrateSwap, SwapState } from './store/slices/swapSlice';
-import { updateCandle, updateDepth, updateTick, addTrade } from './store/slices/marketSlice';
+import { seedBalances, seedCandles, seedEquityHistory, seedPairs, allTokens } from './services/seed';
 import { mockSocket } from './services/mockSocket';
-import { accrueYield } from './services/yield';
 import { colors } from './theme';
+import { RootPersistedState } from './types';
 
 const Bootstrap: React.FC = () => {
   const dispatch = useAppDispatch();
-  const session = useAppSelector((state) => state.session);
-  const portfolio = useAppSelector((state) => state.portfolio);
-  const swap = useAppSelector((state) => state.swap);
 
   React.useEffect(() => {
-    const loadState = async () => {
-      const [sessionData, portfolioData, swapData] = await Promise.all([
-        storage.get<Partial<SessionState>>('session'),
-        storage.get<Partial<PortfolioState>>('portfolio'),
-        storage.get<Partial<SwapState>>('swap'),
-      ]);
-      if (sessionData) {
-        dispatch(hydrateSession(sessionData));
+    let cleanup: (() => void) | undefined;
+    const bootstrap = async () => {
+      const persisted = await storage.get<RootPersistedState>('persisted-state');
+      const pairs = seedPairs();
+      const candles = seedCandles(pairs);
+      dispatch(seedMarket({ pairs, candles }));
+
+      if (persisted) {
+        dispatch(hydrateSession(persisted.session));
+        dispatch(hydratePortfolio(persisted.portfolio));
+        dispatch(hydrateOrders(persisted.orders));
+      } else {
+        const balances = seedBalances();
+        const total = balances.reduce((sum, balance) => sum + balance.amount * 1000, 0);
+        const allocations = balances.map((balance) => ({
+          symbol: balance.symbol,
+          name: allTokens.find((token) => token.symbol === balance.symbol)?.name ?? balance.symbol,
+          value: balance.amount * 1000,
+          weight: total ? (balance.amount * 1000) / total : 0,
+        }));
+        dispatch(setBalances(balances));
+        dispatch(setAllocations(allocations));
+        dispatch(setEquityHistory(seedEquityHistory()));
       }
-      if (portfolioData) {
-        dispatch(hydratePortfolio(portfolioData));
-      }
-      if (swapData) {
-        dispatch(hydrateSwap(swapData));
-      }
-    };
-    loadState();
-  }, [dispatch]);
 
-  React.useEffect(() => {
-    storage.set('session', {
-      selectedWalletId: session.selectedWalletId,
-      theme: session.theme,
-      currency: session.currency,
-      wallets: session.wallets,
-    });
-  }, [session.currency, session.selectedWalletId, session.theme, session.wallets]);
-
-  React.useEffect(() => {
-    storage.set('portfolio', {
-      balances: portfolio.balances,
-      transactions: portfolio.transactions,
-      earnPositions: portfolio.earnPositions,
-      simulationSpeed: portfolio.simulationSpeed,
-    });
-  }, [portfolio.balances, portfolio.transactions, portfolio.earnPositions, portfolio.simulationSpeed]);
-
-  React.useEffect(() => {
-    storage.set('swap', swap);
-  }, [swap]);
-
-  React.useEffect(() => {
-    const state = store.getState();
-    mockSocket.start(state.market.pairs, state.market.candlesByPair);
-    const offTick = mockSocket.on('tick', ({ pairId, price, change24h }) => {
-      dispatch(updateTick({ pairId, price, change24h }));
-    });
-    const offCandle = mockSocket.on('candle', ({ pairId, candle }) => {
-      dispatch(updateCandle({ pairId, candle }));
-    });
-    const offDepth = mockSocket.on('depth', (snapshot) => {
-      dispatch(updateDepth(snapshot));
-    });
-    const offTrade = mockSocket.on('trade', (trade) => {
-      dispatch(
-        addTrade({
-          id: `trade-${trade.time}`,
-          pairId: trade.pairId,
-          price: trade.price,
-          amount: trade.amount,
-          side: trade.side,
-          time: trade.time,
-        }),
+      mockSocket.start(pairs, candles);
+      const offTick = mockSocket.on('tick', ({ pairId, price, change24h }) =>
+        dispatch(updateTick({ pairId, price, change24h }))
       );
-    });
+      const offCandle = mockSocket.on('candle', ({ pairId, candle }) => dispatch(updateCandle({ pairId, candle })));
+      const offDepth = mockSocket.on('depth', ({ pairId, bids, asks }) => dispatch(updateDepth({ pairId, bids, asks })));
+      const offTrade = mockSocket.on('trade', (trade) => dispatch(pushTrade(trade)));
+
+      cleanup = () => {
+        offTick();
+        offCandle();
+        offDepth();
+        offTrade();
+        mockSocket.stop();
+      };
+    };
+
+    bootstrap();
     return () => {
-      offTick();
-      offCandle();
-      offDepth();
-      offTrade();
-      mockSocket.stop();
+      cleanup?.();
     };
   }, [dispatch]);
 
-  const speed = portfolio.simulationSpeed;
-  const earnProducts = portfolio.earnProducts;
-  const positionsRef = React.useRef(portfolio.earnPositions);
   React.useEffect(() => {
-    positionsRef.current = portfolio.earnPositions;
-  }, [portfolio.earnPositions]);
-
-  React.useEffect(() => {
-    const interval = setInterval(() => {
-      if (positionsRef.current.length === 0) return;
-      const updated = accrueYield(positionsRef.current, earnProducts, Date.now(), speed);
-      dispatch(updateEarnPositions(updated));
-    }, Math.max(4000 / speed, 1500));
-    return () => clearInterval(interval);
-  }, [dispatch, earnProducts, speed]);
+    const unsubscribe = store.subscribe(() => {
+      const state = store.getState();
+      const snapshot: RootPersistedState = {
+        session: state.session,
+        portfolio: state.portfolio,
+        orders: state.orders,
+      };
+      storage.set('persisted-state', snapshot).catch(() => undefined);
+    });
+    return unsubscribe;
+  }, []);
 
   return <RootNavigator />;
 };
 
-const App: React.FC = () => {
-  return (
-    <Provider store={store}>
-      <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.background }}>
-        <SafeAreaProvider>
-          <StatusBar style="light" />
-          <Bootstrap />
-        </SafeAreaProvider>
-      </GestureHandlerRootView>
-    </Provider>
-  );
-};
+const App: React.FC = () => (
+  <Provider store={store}>
+    <SafeAreaProvider>
+      <StatusBar style="light" backgroundColor={colors.background} />
+      <Bootstrap />
+    </SafeAreaProvider>
+  </Provider>
+);
 
 export default App;

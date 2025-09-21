@@ -1,78 +1,75 @@
 // File: src/services/mockSocket.ts
-// SIMULATION ONLY – NO REAL MONEY OR APIS
-import { Candle, OrderBookSnapshot, Pair, Tick } from '../types';
-import { randomInRange } from '../utils/math';
+// SIMULATION ONLY – no real APIs
+import { Candle, DepthLevel, MarketPair, Trade } from '../types';
 
-type EventMap = {
-  tick: Tick;
+export type SocketEventMap = {
+  tick: { pairId: string; price: number; change24h: number };
   candle: { pairId: string; candle: Candle };
-  depth: OrderBookSnapshot;
-  trade: { pairId: string; price: number; amount: number; side: 'buy' | 'sell'; time: number };
+  depth: { pairId: string; bids: DepthLevel[]; asks: DepthLevel[] };
+  trade: Trade;
 };
 
-type Listener<K extends keyof EventMap> = (payload: EventMap[K]) => void;
+type Listener<K extends keyof SocketEventMap> = (payload: SocketEventMap[K]) => void;
 
 class MockSocket {
-  private listeners: { [K in keyof EventMap]: Set<Listener<K>> } = {
+  private timers: ReturnType<typeof setInterval>[] = [];
+
+  private listeners: { [K in keyof SocketEventMap]: Set<Listener<K>> } = {
     tick: new Set(),
     candle: new Set(),
     depth: new Set(),
     trade: new Set(),
   };
 
-  private timers: ReturnType<typeof setInterval>[] = [];
-  private pairs: Pair[] = [];
-  private candles: Record<string, Candle[]> = {};
-
-  start(pairs: Pair[], initialCandles: Record<string, Candle[]>): void {
+  start(pairs: MarketPair[], candles: Record<string, Candle[]>): void {
     this.stop();
-    this.pairs = pairs.map((pair) => ({ ...pair, history: [...pair.history] }));
-    this.candles = Object.keys(initialCandles).reduce<Record<string, Candle[]>>((acc, key) => {
-      acc[key] = initialCandles[key].map((candle) => ({ ...candle }));
-      return acc;
-    }, {});
-
-    this.pairs.forEach((pair) => {
-      const loop = () => {
-        const change = randomInRange(-0.015, 0.018);
-        const price = Math.max(0.0001, pair.lastPrice * (1 + change));
-        pair.lastPrice = price;
-        pair.change24h = randomInRange(-0.12, 0.12);
-        pair.history.push(price);
-        if (pair.history.length > 120) {
-          pair.history.shift();
-        }
-        const tick: Tick = {
+    pairs.forEach((pair) => {
+      const timer = setInterval(() => {
+        const drift = (Math.random() - 0.5) * 0.04;
+        const newPrice = Math.max(0.0001, pair.lastPrice * (1 + drift));
+        pair.lastPrice = Number(newPrice.toFixed(2));
+        pair.change24h = pair.change24h + drift * 6;
+        this.emit('tick', {
           pairId: pair.id,
-          price,
+          price: pair.lastPrice,
           change24h: pair.change24h,
-          time: Date.now(),
-        };
-        this.emit('tick', tick);
+        });
 
-        const candles = this.candles[pair.id] ?? [];
-        const latest = candles[candles.length - 1];
+        const history = candles[pair.id] ?? [];
+        const latest = history[history.length - 1];
         if (latest) {
-          latest.close = price;
-          latest.high = Math.max(latest.high, price);
-          latest.low = Math.min(latest.low, price);
-          latest.volume += randomInRange(5, 20);
+          latest.close = pair.lastPrice;
+          latest.high = Math.max(latest.high, pair.lastPrice);
+          latest.low = Math.min(latest.low, pair.lastPrice);
+          latest.volume += Math.random() * 500;
           this.emit('candle', { pairId: pair.id, candle: { ...latest } });
         }
 
-        const depth = this.generateDepth(pair.id, price);
-        this.emit('depth', depth);
+        const bids = Array.from({ length: 8 }).map((_, index) => ({
+          price: Number((pair.lastPrice * (1 - index * 0.0015)).toFixed(2)),
+          amount: Number((Math.random() * 5 + 0.5).toFixed(2)),
+        }));
+        const asks = Array.from({ length: 8 }).map((_, index) => ({
+          price: Number((pair.lastPrice * (1 + index * 0.0015)).toFixed(2)),
+          amount: Number((Math.random() * 5 + 0.5).toFixed(2)),
+        }));
+        this.emit('depth', {
+          pairId: pair.id,
+          bids,
+          asks,
+        });
 
         this.emit('trade', {
+          id: `${pair.id}-${Date.now()}`,
+          orderId: 'stream',
           pairId: pair.id,
-          price,
-          amount: randomInRange(0.01, 0.5),
-          side: change >= 0 ? 'buy' : 'sell',
-          time: Date.now(),
+          side: drift >= 0 ? 'buy' : 'sell',
+          price: pair.lastPrice,
+          quantity: Number((Math.random() * 2).toFixed(3)),
+          fee: 0,
+          timestamp: Date.now(),
         });
-      };
-      loop();
-      const timer = setInterval(loop, 4000 + Math.random() * 3000);
+      }, 4000 + Math.random() * 2000);
       this.timers.push(timer);
     });
   }
@@ -80,37 +77,18 @@ class MockSocket {
   stop(): void {
     this.timers.forEach((timer) => clearInterval(timer));
     this.timers = [];
+    (Object.keys(this.listeners) as (keyof SocketEventMap)[]).forEach((key) => {
+      this.listeners[key].clear();
+    });
   }
 
-  on<K extends keyof EventMap>(event: K, listener: Listener<K>): () => void {
+  on<K extends keyof SocketEventMap>(event: K, listener: Listener<K>): () => void {
     this.listeners[event].add(listener as never);
-    return () => {
-      this.listeners[event].delete(listener as never);
-    };
+    return () => this.listeners[event].delete(listener as never);
   }
 
-  private emit<K extends keyof EventMap>(event: K, payload: EventMap[K]): void {
-    this.listeners[event].forEach((listener) => listener(payload as never));
-  }
-
-  private generateDepth(pairId: string, price: number): OrderBookSnapshot {
-    const bids = Array.from({ length: 10 }).map((_, index) => {
-      const levelPrice = price * (1 - index * 0.0015);
-      return {
-        price: Number(levelPrice.toFixed(2)),
-        amount: randomInRange(0.1, 2.4),
-        side: 'bid' as const,
-      };
-    });
-    const asks = Array.from({ length: 10 }).map((_, index) => {
-      const levelPrice = price * (1 + index * 0.0015);
-      return {
-        price: Number(levelPrice.toFixed(2)),
-        amount: randomInRange(0.1, 2.4),
-        side: 'ask' as const,
-      };
-    });
-    return { pairId, bids, asks };
+  private emit<K extends keyof SocketEventMap>(event: K, payload: SocketEventMap[K]): void {
+    this.listeners[event].forEach((listener) => listener(payload));
   }
 }
 

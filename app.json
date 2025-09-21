@@ -6,6 +6,7 @@
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "assetBundlePatterns": ["**/*"],
+    "plugins": ["expo-constants"],
     "ios": {
       "supportsTablet": false
     },

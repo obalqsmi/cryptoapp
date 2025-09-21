@@ -1,94 +1,107 @@
 // File: src/types.ts
-export type Currency = 'USD' | 'EUR' | 'GBP';
-
-export interface Token {
-  id: string;
+export type Token = {
   symbol: string;
   name: string;
   icon: string;
-  decimals: number;
-}
+  chain: string;
+};
 
-export interface Pair {
+export type MarketPair = {
   id: string;
   base: Token;
   quote: Token;
   lastPrice: number;
   change24h: number;
-  history: number[];
-}
+  high24h: number;
+  low24h: number;
+  volume24h: number;
+  sparkline: number[];
+};
 
-export interface Candle {
-  timestamp: number;
+export type Candle = {
+  time: number;
   open: number;
   high: number;
   low: number;
   close: number;
   volume: number;
-}
+};
 
-export interface Tick {
-  pairId: string;
-  price: number;
-  change24h: number;
-  time: number;
-}
-
-export interface TradeTick {
-  id: string;
-  pairId: string;
+export type DepthLevel = {
   price: number;
   amount: number;
-  side: 'buy' | 'sell';
-  time: number;
-}
+};
 
-export type TransactionType = 'buy' | 'sell' | 'swap' | 'earn' | 'stake' | 'receive' | 'send';
+export type OrderSide = 'buy' | 'sell';
+export type OrderType = 'market' | 'limit';
 
-export interface Txn {
+export type Order = {
   id: string;
-  type: TransactionType;
-  timestamp: number;
-  description: string;
-  amountFiat: number;
-  amountToken: number;
-  tokenId: string;
+  pairId: string;
+  side: OrderSide;
+  type: OrderType;
+  price: number;
+  quantity: number;
+  filledQuantity: number;
+  status: 'open' | 'partial' | 'filled' | 'cancelled';
+  createdAt: number;
+};
+
+export type Trade = {
+  id: string;
+  orderId: string;
+  pairId: string;
+  side: OrderSide;
+  price: number;
+  quantity: number;
   fee: number;
-}
+  timestamp: number;
+};
 
-export interface EarnProduct {
-  id: string;
-  token: Token;
-  chain: string;
-  apy: number;
-  lockPeriodDays: number;
-}
-
-export interface EarnPosition {
-  id: string;
-  productId: string;
-  tokenId: string;
+export type PortfolioBalance = {
+  symbol: string;
   amount: number;
-  startDate: number;
-  lockPeriodDays: number;
-  apy: number;
-  accruedReward: number;
-}
+  available: number;
+};
 
-export interface Wallet {
-  id: string;
+export type Allocation = {
+  symbol: string;
   name: string;
-  balanceFiat: number;
-}
+  value: number;
+  weight: number;
+};
 
-export interface OrderBookLevel {
-  price: number;
-  amount: number;
-  side: 'bid' | 'ask';
-}
+export type SimulationSpeed = 1 | 5 | 20;
 
-export interface OrderBookSnapshot {
-  pairId: string;
-  bids: OrderBookLevel[];
-  asks: OrderBookLevel[];
-}
+export type SessionState = {
+  authenticated: boolean;
+  email: string | null;
+  theme: 'dark' | 'light';
+  baseCurrency: 'USD' | 'EUR';
+};
+
+export type MarketState = {
+  pairs: MarketPair[];
+  candles: Record<string, Candle[]>;
+  orderBook: Record<string, { bids: DepthLevel[]; asks: DepthLevel[] }>;
+  trades: Record<string, Trade[]>;
+  selectedInterval: '1m' | '5m' | '1h' | '1d';
+};
+
+export type PortfolioState = {
+  balances: PortfolioBalance[];
+  allocations: Allocation[];
+  equityHistory: number[];
+};
+
+export type OrdersState = {
+  openOrders: Order[];
+  tradeHistory: Trade[];
+  simulationSpeed: SimulationSpeed;
+};
+
+export type RootPersistedState = {
+  session: SessionState;
+  portfolio: PortfolioState;
+  orders: OrdersState;
+};

@@ -1,42 +1,38 @@
 // File: src/store/slices/sessionSlice.ts
 import { PayloadAction, createSlice } from '@reduxjs/toolkit';
-import { Currency, Wallet } from '../../types';
-import { seedWallets } from '../../services/seed';
-
-export interface SessionState {
-  wallets: Wallet[];
-  selectedWalletId: string;
-  theme: 'dark' | 'system';
-  currency: Currency;
-}
-
-const wallets = seedWallets();
+import { SessionState } from '../../types';
 
 const initialState: SessionState = {
-  wallets,
-  selectedWalletId: wallets[0]?.id ?? 'wallet-1',
+  authenticated: false,
+  email: null,
   theme: 'dark',
-  currency: 'USD',
+  baseCurrency: 'USD',
 };
 
 const sessionSlice = createSlice({
   name: 'session',
   initialState,
   reducers: {
-    selectWallet(state, action: PayloadAction<string>) {
-      state.selectedWalletId = action.payload;
+    hydrateSession: (state, action: PayloadAction<Partial<SessionState>>) => ({
+      ...state,
+      ...action.payload,
+    }),
+    signIn(state, action: PayloadAction<{ email: string }>) {
+      state.authenticated = true;
+      state.email = action.payload.email;
+    },
+    signOut() {
+      return initialState;
     },
     toggleTheme(state) {
-      state.theme = state.theme === 'dark' ? 'system' : 'dark';
+      state.theme = state.theme === 'dark' ? 'light' : 'dark';
     },
-    setCurrency(state, action: PayloadAction<Currency>) {
-      state.currency = action.payload;
-    },
-    hydrateSession(state, action: PayloadAction<Partial<SessionState>>) {
-      return { ...state, ...action.payload };
+    setBaseCurrency(state, action: PayloadAction<'USD' | 'EUR'>) {
+      state.baseCurrency = action.payload;
     },
   },
 });
 
-export const { selectWallet, toggleTheme, setCurrency, hydrateSession } = sessionSlice.actions;
+export const { hydrateSession, signIn, signOut, toggleTheme, setBaseCurrency } = sessionSlice.actions;
+
 export default sessionSlice.reducer;

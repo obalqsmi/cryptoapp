@@ -1,132 +1,93 @@
 // File: src/services/seed.ts
-// SIMULATION ONLY – NO REAL MONEY OR APIS
-import { Candle, EarnProduct, Pair, Token, Wallet } from '../types';
-import { randomInRange } from '../utils/math';
+// SIMULATION ONLY – no real APIs
+import { Candle, MarketPair, PortfolioBalance, Token } from '../types';
 
-const baseTokens: Token[] = [
-  { id: 'btc', symbol: 'BTC', name: 'Bitcoin', icon: '🟠', decimals: 8 },
-  { id: 'eth', symbol: 'ETH', name: 'Ethereum', icon: '🟣', decimals: 8 },
-  { id: 'sol', symbol: 'SOL', name: 'Solana', icon: '🟪', decimals: 8 },
-  { id: 'doge', symbol: 'DOGE', name: 'Dogecoin', icon: '🟡', decimals: 8 },
-  { id: 'cro', symbol: 'CRO', name: 'Cronos', icon: '🔵', decimals: 8 },
-  { id: 'xrp', symbol: 'XRP', name: 'Ripple', icon: '⚫️', decimals: 8 },
-  { id: 'usdt', symbol: 'USDT', name: 'Tether', icon: '🟩', decimals: 6 },
-  { id: 'usdc', symbol: 'USDC', name: 'USD Coin', icon: '🟦', decimals: 6 },
+const tokens: Token[] = [
+  { symbol: 'BTC', name: 'Bitcoin', icon: '₿', chain: 'Bitcoin' },
+  { symbol: 'ETH', name: 'Ethereum', icon: 'Ξ', chain: 'Ethereum' },
+  { symbol: 'SOL', name: 'Solana', icon: '◎', chain: 'Solana' },
+  { symbol: 'BNB', name: 'BNB Chain', icon: '🟡', chain: 'BNB Chain' },
+  { symbol: 'ADA', name: 'Cardano', icon: 'A', chain: 'Cardano' },
+  { symbol: 'XRP', name: 'Ripple', icon: '✕', chain: 'XRPL' },
+  { symbol: 'USDT', name: 'Tether', icon: '$', chain: 'Ethereum' },
 ];
 
-const generateHistory = (length: number, start: number): number[] => {
-  const history: number[] = [];
-  let last = start;
-  for (let i = 0; i < length; i += 1) {
-    const delta = randomInRange(-0.015, 0.02);
-    last = Math.max(start * 0.4, last * (1 + delta));
-    history.push(Number(last.toFixed(2)));
+const randomWalk = (start: number, steps: number, drift = 0): number[] => {
+  const values: number[] = [start];
+  for (let i = 1; i < steps; i += 1) {
+    const change = (Math.random() - 0.5) * 0.04 + drift;
+    const next = Math.max(0.0001, values[i - 1] * (1 + change));
+    values.push(Number(next.toFixed(2)));
   }
-  return history;
+  return values;
 };
 
-export const seedTokens = (): Token[] => baseTokens;
+const buildCandles = (values: number[], intervalMinutes: number): Candle[] => {
+  const now = Date.now();
+  return values.map((close, index) => {
+    const open = values[Math.max(index - 1, 0)];
+    const high = Math.max(open, close) * (1 + Math.random() * 0.01);
+    const low = Math.min(open, close) * (1 - Math.random() * 0.01);
+    return {
+      time: now - (values.length - index) * intervalMinutes * 60 * 1000,
+      open,
+      high: Number(high.toFixed(2)),
+      low: Number(low.toFixed(2)),
+      close,
+      volume: Number((Math.random() * 1000).toFixed(2)),
+    };
+  });
+};
 
-export const seedPairs = (tokens: Token[] = baseTokens): Pair[] => {
-  const usdStable = tokens.find((token) => token.id === 'usdc') ?? tokens[0];
+export const seedPairs = (): MarketPair[] => {
+  const quotes = tokens.find((token) => token.symbol === 'USDT');
+  if (!quotes) throw new Error('Missing USDT token');
   return tokens
-    .filter((token) => token.id !== usdStable.id)
+    .filter((token) => token.symbol !== 'USDT')
     .map((token) => {
       const basePrice =
-        token.id === 'btc'
-          ? 62000
-          : token.id === 'eth'
-            ? 3000
-            : token.id === 'sol'
-              ? 150
-              : token.id === 'doge'
-                ? 0.12
-                : token.id === 'cro'
-                  ? 0.18
-                  : token.id === 'xrp'
-                    ? 0.55
-                    : 1;
-      const change24h = randomInRange(-0.08, 0.12);
+        token.symbol === 'BTC'
+          ? 64000
+          : token.symbol === 'ETH'
+          ? 3200
+          : token.symbol === 'SOL'
+          ? 180
+          : token.symbol === 'BNB'
+          ? 580
+          : token.symbol === 'ADA'
+          ? 0.45
+          : 0.6;
+      const sparkline = randomWalk(basePrice, 40);
+      const lastPrice = sparkline[sparkline.length - 1];
+      const first = sparkline[0];
+      const change24h = ((lastPrice - first) / first) * 100;
       return {
-        id: `${token.id}-${usdStable.id}`,
+        id: `${token.symbol}/USDT`,
         base: token,
-        quote: usdStable,
-        lastPrice: basePrice,
+        quote: quotes,
+        lastPrice,
         change24h,
-        history: generateHistory(60, basePrice),
-      } satisfies Pair;
+        high24h: Math.max(...sparkline),
+        low24h: Math.min(...sparkline),
+        volume24h: Number((Math.random() * 12000 + 2000).toFixed(2)),
+        sparkline,
+      };
     });
 };
 
-export const seedCandles = (pair: Pair, buckets: number = 90): Candle[] => {
-  const candles: Candle[] = [];
-  let price = pair.lastPrice;
-  for (let i = buckets - 1; i >= 0; i -= 1) {
-    const open = price;
-    const change = randomInRange(-0.03, 0.03);
-    const close = Math.max(price * 0.4, open * (1 + change));
-    const high = Math.max(open, close) * (1 + Math.abs(randomInRange(0, 0.01)));
-    const low = Math.min(open, close) * (1 - Math.abs(randomInRange(0, 0.01)));
-    const volume = randomInRange(50, 250);
-    candles.push({
-      timestamp: Date.now() - i * 60 * 60 * 1000,
-      open,
-      high,
-      low,
-      close,
-      volume,
-    });
-    price = close;
-  }
-  return candles;
-};
+export const seedCandles = (pairs: MarketPair[]): Record<string, Candle[]> =>
+  pairs.reduce<Record<string, Candle[]>>((acc, pair) => {
+    acc[pair.id] = buildCandles(randomWalk(pair.lastPrice, 120), 5);
+    return acc;
+  }, {});
 
-export const seedWallets = (): Wallet[] => [
-  { id: 'wallet-1', name: 'Wallet 1', balanceFiat: 16208.32 },
-  { id: 'wallet-2', name: 'Wallet 2', balanceFiat: 4800.11 },
+export const seedBalances = (): PortfolioBalance[] => [
+  { symbol: 'USDT', amount: 12000, available: 12000 },
+  { symbol: 'BTC', amount: 0.42, available: 0.42 },
+  { symbol: 'ETH', amount: 8.4, available: 8.4 },
+  { symbol: 'BNB', amount: 24, available: 24 },
 ];
 
-export const seedEarnProducts = (tokens: Token[] = baseTokens): EarnProduct[] => [
-  {
-    id: 'earn-btc-flex',
-    token: tokens.find((token) => token.id === 'btc') ?? baseTokens[0],
-    chain: 'Bitcoin',
-    apy: 0.045,
-    lockPeriodDays: 0,
-  },
-  {
-    id: 'earn-cro-180',
-    token: tokens.find((token) => token.id === 'cro') ?? baseTokens[4],
-    chain: 'Cronos',
-    apy: 0.085,
-    lockPeriodDays: 180,
-  },
-  {
-    id: 'earn-usdc-90',
-    token: tokens.find((token) => token.id === 'usdc') ?? baseTokens[7],
-    chain: 'Ethereum',
-    apy: 0.065,
-    lockPeriodDays: 90,
-  },
-  {
-    id: 'earn-sol-30',
-    token: tokens.find((token) => token.id === 'sol') ?? baseTokens[2],
-    chain: 'Solana',
-    apy: 0.1,
-    lockPeriodDays: 30,
-  },
-];
+export const seedEquityHistory = (): number[] => randomWalk(52000, 40, 0.002);
 
-export const seedBalances = () => ({
-  btc: 0.225,
-  eth: 2.15,
-  sol: 120,
-  doge: 12000,
-  cro: 2500,
-  xrp: 3000,
-  usdt: 2500,
-  usdc: 5200,
-  usd: 1000,
-});
-
-export const seedTransactions = () => [];
+export const allTokens = tokens;

@@ -1,17 +1,17 @@
 // File: src/theme.ts
 export const colors = {
-  background: '#050B1E',
-  card: '#0B122B',
-  cardElevated: '#101940',
+  background: '#050816',
+  surface: '#0F1629',
+  card: '#121B2F',
+  border: '#1E2A3F',
   textPrimary: '#F5F7FF',
-  textSecondary: '#9FA7C3',
-  textMuted: '#6F7899',
-  accent: '#3F82FF',
-  success: '#25D16A',
-  danger: '#FF4D67',
-  border: '#1F2A4D',
-  surface: '#0E1733',
-  overlay: 'rgba(5, 11, 30, 0.6)',
+  textSecondary: '#92A2C3',
+  positive: '#2ECC71',
+  negative: '#FF4D4F',
+  accent: '#3A8BFF',
+  accentSoft: '#1F3F70',
+  yellow: '#FFC857',
+  overlay: 'rgba(5, 8, 22, 0.6)',
 };
 
 export const spacing = {
@@ -20,7 +20,6 @@ export const spacing = {
   md: 16,
   lg: 24,
   xl: 32,
-  xxl: 48,
 };
 
 export const radii = {
@@ -31,29 +30,8 @@ export const radii = {
   pill: 999,
 };
 
-export const typography = {
-  family: 'System',
-  weightRegular: '400',
-  weightMedium: '600',
-  weightBold: '700',
+export const fonts = {
+  regular: 'System',
+  medium: 'System',
+  bold: 'System',
 };
-
-export const shadows = {
-  card: {
-    shadowColor: '#000',
-    shadowOpacity: 0.35,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 12,
-  },
-};
-
-export const theme = {
-  colors,
-  spacing,
-  radii,
-  typography,
-  shadows,
-};
-
-export type Theme = typeof theme;
