@@ -1,0 +1,2 @@
+This project intentionally omits binary assets.
+Provide platform-specific icons and splash screens via the Expo config if needed.
